@@ -18,25 +18,25 @@ typedef struct {
 	ELF64_HALF		machine;
 	ELF64_WORD		version;
 	ELF64_ADDR		entry;
-	ELF64_OFFSET	phoff;
-	ELF64_OFFSET	shoff;
+	ELF64_OFFSET	phoff;		// プログラムヘッダ開始オフセット
+	ELF64_OFFSET	shoff;		// セクションヘッダ開始オフセット
 	ELF64_WORD		flags;
 	ELF64_HALF		ehsize;
 	ELF64_HALF		phentsize;
-	ELF64_HALF		phnum;
+	ELF64_HALF		phnum;		// プログラムヘッダ配列要素数
 	ELF64_HALF		shentsize;
-	ELF64_HALF		shnum;
+	ELF64_HALF		shnum;		// セクションヘッダ配列要素数
 	ELF64_HALF		shstrndx;
 } ELF64_EHDR;
 
 typedef struct {
-	ELF64_WORD		type;
-	ELF64_WORD		flags;
-	ELF64_OFFSET	offset;
-	ELF64_ADDR		vaddr;
-	ELF64_ADDR		paddr;
-	ELF64_XWORD		szfile;
-	ELF64_XWORD		szmem;
+	ELF64_WORD		type;		// セグメント種別（PHDR, LOAD 等）
+	ELF64_WORD		flags;		// フラグ
+	ELF64_OFFSET	offset;		// オフセット
+	ELF64_ADDR		vaddr;		// 仮想アドレス
+	ELF64_ADDR		paddr;		// 物理アドレス
+	ELF64_XWORD		szfile;		// ファイルサイズ
+	ELF64_XWORD		szmem;		// メモリサイズ
 	ELF64_XWORD		align;
 } ELF64_PHDR;
 
