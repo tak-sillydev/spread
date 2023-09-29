@@ -20,6 +20,8 @@ typedef struct _MemoryMap {
 	UINT32	verdesc;
 } MEMMAP;
 
+typedef void EntryPointType(UINT64, UINT64);
+
 EFI_STATUS GetMemoryMap(MEMMAP *map) {
 	if (map->buf == NULL) {
 		return EFI_BUFFER_TOO_SMALL;
@@ -57,15 +59,20 @@ const CHAR16* GetMemoryTypeUnicode(EFI_MEMORY_TYPE type) {
 
 EFI_STATUS SaveMemoryMap(MEMMAP *map, EFI_FILE_PROTOCOL *file) {
 	EFI_PHYSICAL_ADDRESS	iter;
-	CHAR8	buf[256];
-	UINTN	len;
-	int		i;
+	EFI_STATUS	status;
+	CHAR8		buf[256];
+	UINTN		len;
+	int			i;
 
 	CHAR8	*header = 
 				"Index, Type, Type(name), PhysStart, NumOfPages, Attr\n";
 
 	len = AsciiStrLen(header);
-	file->Write(file, &len, header);
+	status = file->Write(file, &len, header);
+
+	if (EFI_ERROR(status)) { return status; }
+
+	Print(L"Memmap Buffer Address = %08x, Size = %08x\n", map->buf, map->szmap);
 
 	for(iter = (EFI_PHYSICAL_ADDRESS)map->buf, i = 0;
 		iter < (EFI_PHYSICAL_ADDRESS)map->buf + map->szmap;
@@ -78,7 +85,9 @@ EFI_STATUS SaveMemoryMap(MEMMAP *map, EFI_FILE_PROTOCOL *file) {
 			i, desc->Type, GetMemoryTypeUnicode(desc->Type),
 			desc->PhysicalStart, desc->NumberOfPages, desc->Attribute & 0xffffflu
 		);
-		file->Write(file, &len, buf);
+		status = file->Write(file, &len, buf);
+
+		if (EFI_ERROR(status)) { return status; }
 	}
 	return EFI_SUCCESS;
 }
@@ -86,8 +95,9 @@ EFI_STATUS SaveMemoryMap(MEMMAP *map, EFI_FILE_PROTOCOL *file) {
 EFI_STATUS OpenRootDir(EFI_HANDLE himg, EFI_FILE_PROTOCOL **root) {
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL	*fs;
 	EFI_LOADED_IMAGE_PROTOCOL		*ldimg;
+	EFI_STATUS	status;
 
-	gBS->OpenProtocol(
+	status = gBS->OpenProtocol(
 		himg,
 		&gEfiLoadedImageProtocolGuid,
 		(VOID**)&ldimg,
@@ -95,7 +105,9 @@ EFI_STATUS OpenRootDir(EFI_HANDLE himg, EFI_FILE_PROTOCOL **root) {
 		NULL,
 		EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL
 	);
-	gBS->OpenProtocol(
+	if (EFI_ERROR(status)) { return status; }
+
+	status = gBS->OpenProtocol(
 		ldimg->DeviceHandle,
 		&gEfiSimpleFileSystemProtocolGuid,
 		(VOID**)&fs,
@@ -103,9 +115,49 @@ EFI_STATUS OpenRootDir(EFI_HANDLE himg, EFI_FILE_PROTOCOL **root) {
 		NULL,
 		EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL
 	);
-	fs->OpenVolume(fs, root);
+	if (EFI_ERROR(status)) { return status; }
+
+	return fs->OpenVolume(fs, root);
+}
+
+EFI_STATUS OpenGOP(EFI_HANDLE himg, EFI_GRAPHICS_OUTPUT_PROTOCOL **gop) {
+	EFI_STATUS	status;
+	EFI_HANDLE	*hgop = NULL; 
+	UINTN		nhgop = 0;
+
+	status = gBS->LocateHandleBuffer(
+		ByProtocol, &gEfiGraphicsOutputProtocolGuid,
+		NULL, &nhgop, &hgop
+	);
+	if (EFI_ERROR(status)) { return status; }
+
+	status = gBS->OpenProtocol(
+		hgop[0], &gEfiGraphicsOutputProtocolGuid,
+		(VOID **)gop, himg, NULL,
+		EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 
+	);
+	if (EFI_ERROR(status)) { return status; }
 	
+	FreePool(hgop);
+
 	return EFI_SUCCESS;
+}
+
+const CHAR16* GetPixelFormatUnicode(EFI_GRAPHICS_PIXEL_FORMAT fmt) {
+	switch (fmt) {
+	case PixelRedGreenBlueReserved8BitPerColor:
+		return L"PixelRedGreenBlueReserved8BitPerColor";
+	case PixelBlueGreenRedReserved8BitPerColor:
+		return L"PixelBlueGreenRedReserved8BitPerColor";
+	case PixelBitMask:
+		return L"PixelBitMask";
+	case PixelBltOnly:
+		return L"PixelBltOnly";
+	case PixelFormatMax:
+		return L"PixelFormatMax";
+	default:
+		return L"InvalidPixelFormat";
+	}
 }
 
 // 全LOADセグメントのうち、最小開始アドレスと最大終端アドレスを求める
@@ -154,10 +206,12 @@ void CheckError(const CHAR16 *msg, EFI_STATUS status, int line) {
 	return;
 }
 
-EFI_STATUS UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
+EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
 	EFI_FILE_PROTOCOL	*rootdir, *memmap_file;
 	CHAR8	memmap_buf[4096 * 4];
 	MEMMAP	memmap = { sizeof(memmap_buf), memmap_buf, 0, 0, 0, 0 };
+
+	EFI_GRAPHICS_OUTPUT_PROTOCOL	*gop;
 
 	// kernel.elf 読み込み処理用
 	EFI_FILE_PROTOCOL	*kernel_file;
@@ -174,10 +228,7 @@ EFI_STATUS UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
 	UINT64		kfirst_addr, klast_addr;
 	UINTN		npages;
 
-	typedef void EntryPointType(void);
-
-	Print(L"Welcome to Mysys\n");
-	Print(L"Here is LINE %d, FILE %s\n", __LINE__, L""__FILE__);
+	Print(L"Welcome to Spread\n");
 
 	// メモリマップの取得
 	status = GetMemoryMap(&memmap);
@@ -205,6 +256,21 @@ EFI_STATUS UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
 		status = memmap_file->Close(memmap_file);
 		CheckError(L"Failed to close \"\\memmap\"", status, __LINE__);
 	}
+	// 画面出力（GOP）を扱えるようにする
+	status = OpenGOP(ImgHandle, &gop);
+	Print(
+		L"Resolution: %ux%u, Pixel Format: %s, %u px / line\n",
+		gop->Mode->Info->HorizontalResolution,
+		gop->Mode->Info->VerticalResolution,
+		GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
+		gop->Mode->Info->PixelsPerScanLine
+	);
+	Print(
+		L"Frame Buffer: 0x%0lx - 0x%0lx, (%lu bytes)",
+		gop->Mode->FrameBufferBase,
+		gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
+		gop->Mode->FrameBufferSize
+	);
 
 	// kernel.elf 読み込み
 	status = rootdir->Open(
@@ -255,8 +321,9 @@ EFI_STATUS UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
 	}
 	// ELFヘッダのオフセット24にエントリポイントのアドレスがある
 	entry_addr = *(UINT64 *)(kfirst_addr + 24);
-	((EntryPointType *)entry_addr)();
-
+	((EntryPointType *)entry_addr)(
+		gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize
+	);
 	Print(L"Why can you read this message...?\n");
 
 	while (1);
