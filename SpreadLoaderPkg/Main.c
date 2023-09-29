@@ -9,7 +9,9 @@
 #include <Protocol/DiskIo2.h>
 #include <Protocol/BlockIo.h>
 #include <Guid/FileInfo.h>
+
 #include "elf.hpp"
+#include "framebuffer_config.hpp"
 
 typedef struct _MemoryMap {
 	UINTN	szbuf;
@@ -20,7 +22,7 @@ typedef struct _MemoryMap {
 	UINT32	verdesc;
 } MEMMAP;
 
-typedef void EntryPointType(UINT64, UINT64);
+typedef void EntryPointType(const FrameBufferConfig *);
 
 EFI_STATUS GetMemoryMap(MEMMAP *map) {
 	if (map->buf == NULL) {
@@ -137,7 +139,7 @@ EFI_STATUS OpenGOP(EFI_HANDLE himg, EFI_GRAPHICS_OUTPUT_PROTOCOL **gop) {
 		EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 
 	);
 	if (EFI_ERROR(status)) { return status; }
-	
+
 	FreePool(hgop);
 
 	return EFI_SUCCESS;
@@ -319,11 +321,28 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImgHandle, EFI_SYSTEM_TABLE *SysTable) {
 		status = gBS->ExitBootServices(ImgHandle, memmap.mapkey);
 		CheckError(L"Failed to exit BootServices", status, __LINE__);
 	}
+
+	// カーネル側にグラフィックス情報を渡すための準備
+	FrameBufferConfig conf = {
+		(UINT8 *)gop->Mode->FrameBufferBase,
+		gop->Mode->Info->PixelsPerScanLine,
+		gop->Mode->Info->HorizontalResolution,
+		gop->Mode->Info->VerticalResolution,
+		0
+	};
+	switch (gop->Mode->Info->PixelFormat)
+	{
+	case PixelRedGreenBlueReserved8BitPerColor:
+		conf.pixelformat = kPixelRGBResv8BitPerColor; break;
+	case PixelBlueGreenRedReserved8BitPerColor:
+		conf.pixelformat = kPixelBGRResv8BitPerColor; break;
+	default:
+		Print(L"FATAL: Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
+		Halt();
+	}
 	// ELFヘッダのオフセット24にエントリポイントのアドレスがある
 	entry_addr = *(UINT64 *)(kfirst_addr + 24);
-	((EntryPointType *)entry_addr)(
-		gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize
-	);
+	((EntryPointType *)entry_addr)(&conf);
 	Print(L"Why can you read this message...?\n");
 
 	while (1);
