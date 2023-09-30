@@ -34,8 +34,9 @@ extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 			pxwriter->Write(x, y, { 0, 0xff, 0 });
 		}
 	}
-	WriteAscii(*pxwriter, 50, 50, 'A', { 0, 0, 0 });
-	WriteAscii(*pxwriter, 58, 50, 'A', { 0, 0, 0 });
-
+	int i = 0;
+	for (char ch = '!'; ch <= '~'; ch++, i++) {
+		WriteAscii(*pxwriter, i * 8, 50, ch, { 0, 0, 0 });
+	}
 	while (1) { __asm__("hlt"); }
 }
