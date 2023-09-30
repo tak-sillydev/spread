@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 
 #include "framebuffer_config.hpp"
 #include "graphics.hpp"
@@ -38,5 +39,11 @@ extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 	for (char ch = '!'; ch <= '~'; ch++, i++) {
 		WriteAscii(*pxwriter, i * 8, 50, ch, { 0, 0, 0 });
 	}
+	WriteString(*pxwriter, 0, 66, "Welcome to Spread!", { 0, 0, 0xff });
+
+	char buf[128];
+	sprintf(buf, "1 + 2 = %d", 1 + 2);
+	WriteString(*pxwriter, 0, 82, buf, { 0xff, 0, 0 });
+
 	while (1) { __asm__("hlt"); }
 }
