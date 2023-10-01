@@ -8,12 +8,31 @@
 #include "framebuffer_config.hpp"
 #include "graphics.hpp"
 #include "font.hpp"
+#include "console.hpp"
 
 void* operator new(size_t size, void *buf) { return buf; }
 void  operator delete(void* obj) noexcept {}
 
 char pxwriter_buf[sizeof(RGBResv8BitPerColorPixelWriter)];
 PixelWriter *pxwriter;
+
+char cons_buf[sizeof(Console)];
+Console *cons;
+
+// カーネル メッセージの出力。
+// 出力された（はずの）文字数を返す。
+int printk(const char *format, ...) {
+	va_list	ap;
+	char	s[1024];
+	int		result;
+
+	va_start(ap, format);
+	result = vsnprintf(s, sizeof(s) / sizeof(char), format, ap);
+	va_end(ap);
+
+	cons->PutString(s);
+	return result;
+}
 
 extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 	switch (fbufconf.pixelformat) {
@@ -30,20 +49,11 @@ extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 			pxwriter->Write(x, y, { 0xff, 0xff, 0xff });
 		}
 	}
-	for (int y = 100; y < 200; y++) {
-		for (int x = 100; x < 200; x++) {
-			pxwriter->Write(x, y, { 0, 0xff, 0 });
-		}
-	}
-	int i = 0;
-	for (char ch = '!'; ch <= '~'; ch++, i++) {
-		WriteAscii(*pxwriter, i * 8, 50, ch, { 0, 0, 0 });
-	}
-	WriteString(*pxwriter, 0, 66, "Welcome to Spread!", { 0, 0, 0xff });
+	cons = new(cons_buf) Console(*pxwriter, { 0, 0, 0 }, { 0xff, 0xff, 0xff });
 
-	char buf[128];
-	sprintf(buf, "1 + 2 = %d", 1 + 2);
-	WriteString(*pxwriter, 0, 82, buf, { 0xff, 0, 0 });
-
+	for (int i = 0; i < Console::kRows + 2; i++) {
+		printk("printk line: %d\n", i);
+	}
 	while (1) { __asm__("hlt"); }
 }
+set
