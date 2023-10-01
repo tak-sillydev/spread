@@ -25,13 +25,19 @@ private:
 class RGBResv8BitPerColorPixelWriter : public PixelWriter {
 public:
 	using PixelWriter::PixelWriter;	// 子クラスのコンストラクタが親のものに転送される
-
 	virtual void Write(int x, int y, const PixelColor& c) override;
 };
 
 class BGRResv8BitPerColorPixelWriter : public PixelWriter {
 public:
 	using PixelWriter::PixelWriter;
-
 	virtual void Write(int x, int y, const PixelColor& c) override;
 };
+
+template<typename T>
+struct Vector2D {
+	T	x, y;
+};
+
+void DrawRect(PixelWriter& pxwriter, const Vector2D<int>& pos, const Vector2D<int>& size, const PixelColor& c);
+void FillRect(PixelWriter& pxwriter, const Vector2D<int>& pos, const Vector2D<int>& size, const PixelColor& c);

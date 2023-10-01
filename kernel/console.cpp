@@ -1,5 +1,6 @@
 // console.cpp
 // コンソール クラスの定義。カーネル メッセージの出力に用いる
+
 #include "console.hpp"
 
 #include <cstring>

@@ -1,3 +1,6 @@
+// font.cpp
+// hankaku.txt から生成されたシステム フォントを操作する。
+
 #include "font.hpp"
 
 // objcopy コマンドで生成されたバイナリデータを表す変数は「配列」として渡される。
