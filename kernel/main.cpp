@@ -9,8 +9,10 @@
 #include "graphics.hpp"
 #include "font.hpp"
 #include "console.hpp"
+#include "pci.hpp"
 
-void* operator new(size_t size, void *buf) { return buf; }
+// <array>（pci.hpp で使用）が配置 new を呼ぶので定義廃止
+// void* operator new(size_t size, void *buf) { return buf; }
 void  operator delete(void* obj) noexcept {}
 
 // デスクトップ画面を表現する色
@@ -101,7 +103,7 @@ extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 
 	// コンソール作成
 	cons = new(cons_buf) Console(*pxwriter, kDesktopFGColor, kDesktopBGColor);
-	printk("Welcome to Spread!");
+	printk("Welcome to Spread!\n");
 
 	// マウスカーソル描画
 	for (int dy = 0; dy < kMouseCursor_Height; dy++) {
@@ -116,6 +118,20 @@ extern "C" void KernelMain(const FrameBufferConfig& fbufconf) {
 				break;
 			}
 		}
+	}
+	// PCI バスのスキャン
+	auto err = PCI::ScanAllBus();
+	printk("PCI::ScanAllBus: %s\n", err.Name());
+
+	for (int i = 0; i < PCI::ndevs; i++) {
+		const auto& dev = PCI::devices[i];
+		auto vendor_id = PCI::ReadVendorId(dev.bus, dev.dev, dev.func);
+		auto clscode = PCI::ReadClassCode(dev.bus, dev.dev, dev.func);
+
+		printk(
+			"%02d:%02d:%d: vendor %04x, class %08x, hdrtype %02x\n",
+			dev.bus, dev.dev, dev.func, vendor_id, clscode, dev.hdrtype
+		);
 	}
 	while (1) { __asm__("hlt"); }
 }
